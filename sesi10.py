@@ -19,7 +19,7 @@ file_paths = {
 # Streamlit Layout
 st.sidebar.title("Dashboard Data Kunjungan Wisata")
 st.sidebar.write("*Created by Kelompok 3*")
-st.sidebar.image("raspberry.png", use_column_width=True)
+st.sidebar.image("data.jpg", use_column_width=True)
 
 st.sidebar.write("""
 - *Aldiansyah Reksa Pratama* - NRP: 220434015  
