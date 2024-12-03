@@ -1,87 +1,134 @@
-import streamlit as st
 import pandas as pd
-import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+import streamlit as st
+from datetime import datetime
 
-# File paths
+# Daftar file dataset
 file_paths = {
-    '2017': '2017.xlsx',
-    '2018': '2018.xlsx',
-    '2019': '2019.xlsx',
-    '2020': '2020.xlsx',
-    '2021': '2021.xlsx',
-    '2022': '2022.xlsx',
-    '2023': '2023.xlsx',
+    '2017': 'data_2017.xlsx',
+    '2018': 'data_2018.xlsx',
+    '2019': 'data_2019.xlsx',
+    '2020': 'data_2020.xlsx',
+    '2021': 'data_2021.xlsx',
+    '2022': 'data_2022.xlsx',
+    '2023': 'data_2023.xlsx'
 }
 
-# Load data
-def load_data():
-    all_data = {}
-    for year, path in file_paths.items():
-        try:
-            df = pd.read_excel(path)
-            all_data[year] = df
-        except Exception as e:
-            st.error(f"Error loading {path}: {e}")
-    return all_data
 
-# Sidebar
-st.sidebar.title("Kelompok")
-st.sidebar.write("1. Anggota 1\n2. Anggota 2\n3. Anggota 3")
+# Streamlit Layout
+st.sidebar.title("Dashboard Data Kunjungan Wisata")
+st.sidebar.write("*Created by Kelompok 3*")
+st.sidebar.image("raspberry.png", use_column_width=True)
 
-# Header
-st.title("Dashboard Wisatawan Masuk ke Indonesia (2017-2023)")
-st.subheader("Analisis Jalur Masuk: Darat, Laut, Udara")
+st.sidebar.write("""
+- *Aldiansyah Reksa Pratama* - NRP: 220434015  
+- *Almayda Faturohman* - NRP: 210414009  
+- *M.Fakhrijal Pratama* - NRP: 210414017 
+- *Rifky Azis* - NRP: 210414018  
+- *Melly Diyani* - NRP: 210414028
+""")
 
-# Load all data
-data = load_data()
 
-# Sidebar Filters
-st.sidebar.header("Pilih Filter")
-year = st.sidebar.selectbox("Pilih Tahun", options=list(data.keys()))
-month = st.sidebar.selectbox("Pilih Bulan", options=range(1, 13))
-route = st.sidebar.selectbox("Pilih Jalur", options=["Darat", "Laut", "Udara"])
-show_total = st.sidebar.checkbox("Tampilkan Total Semua Jalur")
-show_distribution = st.sidebar.checkbox("Distribusi Kunjungan Perbulan")
-show_trend = st.sidebar.checkbox("Trend Kunjungan Per Jalur")
+# Daftar bulan dalam bahasa Indonesia
+bulan_indonesia = {
+    "January": "Januari", "February": "Februari", "March": "Maret", "April": "April",
+    "May": "Mei", "June": "Juni", "July": "Juli", "August": "Agustus",
+    "September": "September", "October": "Oktober", "November": "November", "December": "Desember"
+}
 
-# Filter Data
-if year in data:
-    df_selected = data[year]
-    if 'Bulan' in df_selected.columns:
-        df_selected = df_selected[df_selected['Bulan'] == month]
+# Widget untuk memilih Tahun dan Bulan menggunakan date_input
+date_input = st.sidebar.date_input(
+    "Pilih Tahun dan Bulan",
+    min_value=datetime(2017, 1, 1),
+    max_value=datetime(2023, 12, 31),
+    value=datetime(2023, 1, 1)
+)
 
-    # Main Container
-    with st.container():
-        # Bar chart untuk jalur tertentu
-        st.subheader(f"Kunjungan Melalui Jalur {route} di Tahun {year}, Bulan {month}")
-        if route in df_selected.columns:
-            chart_data = df_selected[[route]].sum()
-            st.bar_chart(chart_data)
-        else:
-            st.error(f"Kolom '{route}' tidak ditemukan dalam data!")
+# Extract Tahun dan Bulan dari tanggal yang dipilih
+tahun = date_input.year
+bulan = bulan_indonesia[date_input.strftime('%B')]  # Mengubah nama bulan ke bahasa Indonesia
 
-        # Total semua jalur
-        if show_total:
-            st.subheader(f"Total Kunjungan Semua Jalur di Tahun {year}, Bulan {month}")
-            total_data = df_selected.sum()
-            st.bar_chart(total_data)
+# Load data untuk tahun yang dipilih
+@st.cache_data  # Cache data untuk menghindari pemrosesan ulang yang tidak perlu
+def load_data(tahun):
+    file_path = file_paths[str(tahun)]
+    df = pd.read_excel(file_path, skiprows=1)  # Abaikan header tambahan
 
-        # Distribusi per bulan
-        if show_distribution:
-            st.subheader(f"Distribusi Kunjungan per Bulan di Tahun {year}")
-            if 'Bulan' in df_selected.columns:
-                monthly_data = df_selected.groupby("Bulan").sum()
-                st.bar_chart(monthly_data)
-            else:
-                st.error("Kolom 'Bulan' tidak ditemukan dalam data!")
+    # Bersihkan dan atur ulang kolom
+    df.columns = [
+        "Pintu Masuk", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember", "Tahunan"
+    ]
+    numeric_columns = df.columns[2:]  # Kolom angka (Januari hingga Tahunan)
+    df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
+    
+    return df
 
-        # Trend per jalur
-        if show_trend:
-            st.subheader(f"Trend Kunjungan per Jalur (2017-2023)")
-            trend_data = pd.DataFrame({
-                year: data[year][route].sum() if route in data[year].columns else 0
-                for year in data.keys()
-            }, index=[route])
-            st.bar_chart(trend_data)
-else:
-    st.error("Data untuk tahun yang dipilih tidak ditemukan!")
+df = load_data(tahun)  # Memuat data untuk tahun yang dipilih
+
+# Filtering berdasarkan kategori jalur
+kategori_jalur = st.sidebar.selectbox(
+    "Pilih Kategori Jalur",
+    ["A. Pintu Udara", "B. Pintu Laut", "C. Pintu Darat"]
+)
+
+if kategori_jalur == "A. Pintu Udara":
+    df_filtered_jalur = df.iloc[0:16]  # Baris 0 hingga 17
+elif kategori_jalur == "B. Pintu Laut":
+    df_filtered_jalur = df.iloc[17:24]  # Baris 19 hingga 25
+elif kategori_jalur == "C. Pintu Darat":
+    df_filtered_jalur = df.iloc[25:31]  # Baris 27 hingga 32
+
+# Pilih pintu masuk spesifik berdasarkan jalur
+pintu_pilihan = st.sidebar.selectbox(
+    "Pilih Nama Pintu Masuk",
+    df_filtered_jalur["Pintu Masuk"].unique()
+)
+
+# Filter data berdasarkan pilihan pintu masuk dan bulan
+data_filtered = df_filtered_jalur[
+    (df_filtered_jalur["Pintu Masuk"] == pintu_pilihan)
+]
+
+# Visualisasi Data
+st.title("Analisis Kunjungan Wisata Mancanegara")
+st.subheader(f"Distribusi Wisatawan di Pintu Masuk: {pintu_pilihan} Tahun {tahun} Bulan {bulan}")
+
+# Update nilai Total Kunjungan Tahunan
+total_kunjungan_tahunan = data_filtered['Tahunan'].values[0] if not data_filtered.empty else 0
+st.write(f"*Total Kunjungan Tahunan di {pintu_pilihan}:* {total_kunjungan_tahunan:,.2f}")
+
+# Visualisasi distribusi bulanan
+bulan_data = data_filtered.iloc[0, 2:-1].reset_index()
+bulan_data.columns = ["Bulan", "Total Kunjungan"]
+
+# Cari indeks bulan yang dipilih
+bulan_index = data_filtered.columns.get_loc(bulan)  # Mengambil kolom berdasarkan bulan yang dipilih
+
+# Nilai total kunjungan bulan yang dipilih
+total_bulan = data_filtered.iloc[0, bulan_index] if not data_filtered.empty else 0
+st.write(f"*Total Kunjungan Bulan {bulan}:* {total_bulan:,.2f}")
+
+# Plot chart distribusi bulanan
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(data=bulan_data, x="Bulan", y="Total Kunjungan", ax=ax)
+ax.set_title(f"Distribusi Kunjungan Bulanan di {pintu_pilihan}")
+ax.set_xlabel("Bulan")
+ax.set_ylabel("Total Kunjungan")
+ax.tick_params(axis='x', rotation=45)
+st.pyplot(fig)
+
+# Analisis keseluruhan
+if st.sidebar.checkbox("Tampilkan Analisis Keseluruhan"):
+    st.subheader("Total Kunjungan Wisata untuk Semua Pintu Masuk")
+    total_data = df_filtered_jalur.groupby("Pintu Masuk")["Tahunan"].sum().reset_index()
+    total_data.columns = ["Pintu Masuk", "Total Kunjungan"]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.barplot(data=total_data, x="Pintu Masuk", y="Total Kunjungan", ax=ax)
+    ax.set_title("Total Kunjungan Wisata per Pintu Masuk")
+    ax.set_xlabel("Pintu Masuk")
+    ax.set_ylabel("Total Kunjungan")
+    ax.tick_params(axis='x', rotation=45)
+    st.pyplot(fig)
